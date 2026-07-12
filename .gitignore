@@ -1,0 +1,13 @@
+# environment
+.env
+.venv/
+
+# data and results (heavy, reproduced by the pipeline)
+data/
+eval/results/
+
+# caches
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

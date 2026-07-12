@@ -1,0 +1,41 @@
+[project]
+name = "financebench-rag"
+version = "0.1.0"
+description = "RAG pipeline over the FinanceBench open subset with a page-level retrieval eval harness"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy==2.2.0",
+    "pytest==9.1.1",
+    "ruff==0.15.21",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+# Untyped ML dependencies (added in later phases) are not type-checked.
+[[tool.mypy.overrides]]
+module = ["docling.*", "fastembed.*", "bm25s.*", "ragas.*", "streamlit.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: requires Qdrant, Docling models, or LLM APIs; excluded by default",
+]
