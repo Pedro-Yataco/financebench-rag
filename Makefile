@@ -1,7 +1,10 @@
-.PHONY: fetch-data test test-integration lint typecheck
+.PHONY: fetch-data ingest test test-integration lint typecheck
 
 fetch-data:
 	uv run python -m scripts.fetch_data
+
+ingest:
+	uv run python -m src.ingest
 
 test:
 	uv run pytest
