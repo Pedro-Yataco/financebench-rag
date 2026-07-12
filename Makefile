@@ -1,4 +1,10 @@
-.PHONY: fetch-data ingest test test-integration lint typecheck
+.PHONY: up down fetch-data ingest test test-integration lint typecheck
+
+up:
+	docker compose up -d
+
+down:
+	docker compose down
 
 fetch-data:
 	uv run python -m scripts.fetch_data
