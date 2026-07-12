@@ -88,6 +88,45 @@ def test_ingest_limit_counts_cached_docs_within_window(tmp_path: Path) -> None:
     assert result.parsed == []
 
 
+def test_native_failures_extracts_page_failure_lines() -> None:
+    from src.ingest import native_failures
+
+    stderr_text = (
+        "Loading weights: 100%|##########| 770/770\n"
+        "Stage preprocess failed for run 4, pages [10]: std::bad_alloc\n"
+        "Finished converting pages 112/112\n"
+        "Stage preprocess failed for run 4, pages [11]: std::bad_alloc\n"
+    )
+
+    assert native_failures(stderr_text) == [
+        "Stage preprocess failed for run 4, pages [10]: std::bad_alloc",
+        "Stage preprocess failed for run 4, pages [11]: std::bad_alloc",
+    ]
+    assert native_failures("Loading weights: 100%\nall good\n") == []
+
+
+def test_check_conversion_passes_on_clean_success() -> None:
+    from src.ingest import check_conversion
+
+    check_conversion("success", "Loading weights: 100%\n")
+
+
+def test_check_conversion_raises_on_native_page_failures() -> None:
+    from src.ingest import check_conversion
+
+    with pytest.raises(RuntimeError, match=r"pages \[10\]"):
+        check_conversion(
+            "success", "Stage preprocess failed for run 4, pages [10]: std::bad_alloc\n"
+        )
+
+
+def test_check_conversion_raises_on_non_success_status() -> None:
+    from src.ingest import check_conversion
+
+    with pytest.raises(RuntimeError, match="partial_success"):
+        check_conversion("partial_success", "")
+
+
 def test_format_summary_reports_counts_and_failures() -> None:
     result = IngestResult(
         parsed=["DOC_C"],

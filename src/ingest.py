@@ -9,9 +9,13 @@ failures are collected and reported instead of aborting the run.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import os
+import sys
+import tempfile
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -89,6 +93,49 @@ def format_summary(result: IngestResult) -> str:
     return "\n".join(lines)
 
 
+def native_failures(stderr_text: str) -> list[str]:
+    """Per-page failure lines from docling-parse's native (C++) stderr output.
+
+    Under memory pressure the native parser logs e.g. "Stage preprocess failed
+    for run 4, pages [10]: std::bad_alloc" and returns the page EMPTY: the doc
+    then converts with status SUCCESS but silently misses those pages.
+    """
+    return [
+        line.strip() for line in stderr_text.splitlines() if "failed" in line and "pages" in line
+    ]
+
+
+def check_conversion(status: str, native_stderr: str) -> None:
+    """Raise if a conversion had page-level native failures or a non-success status."""
+    problems = native_failures(native_stderr)
+    if status != "success":
+        problems.append(f"conversion status: {status}")
+    if problems:
+        raise RuntimeError("; ".join(problems))
+
+
+@contextlib.contextmanager
+def _capture_fd_stderr() -> Iterator[list[str]]:
+    """Capture OS-level stderr (fd 2) — the only place C++ page failures appear.
+
+    Python-level redirection misses native writes, hence the fd dance. The
+    captured text is appended to the yielded list on exit.
+    """
+    captured: list[str] = []
+    sys.stderr.flush()
+    saved_fd = os.dup(2)
+    with tempfile.TemporaryFile(mode="w+b") as tmp:
+        try:
+            os.dup2(tmp.fileno(), 2)
+            yield captured
+        finally:
+            sys.stderr.flush()
+            os.dup2(saved_fd, 2)
+            os.close(saved_fd)
+            tmp.seek(0)
+            captured.append(tmp.read().decode("utf-8", errors="replace"))
+
+
 def build_docling_parser() -> ParseFn:
     """Build the real Docling parse function (imports deferred: heavy deps)."""
     from docling.datamodel.base_models import InputFormat
@@ -104,7 +151,14 @@ def build_docling_parser() -> ParseFn:
     )
 
     def parse(pdf: Path) -> dict[str, Any]:
-        document: dict[str, Any] = converter.convert(pdf).document.export_to_dict()
+        with _capture_fd_stderr() as captured:
+            result = converter.convert(pdf)
+        native_stderr = captured[0] if captured else ""
+        if native_stderr:
+            sys.stderr.write(native_stderr)
+            sys.stderr.flush()
+        check_conversion(result.status.value, native_stderr)
+        document: dict[str, Any] = result.document.export_to_dict()
         return document
 
     return parse
