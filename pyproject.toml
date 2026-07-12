@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "RAG pipeline over the FinanceBench open subset with a page-level retrieval eval harness"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "pydantic==2.13.4",
+]
 
 [dependency-groups]
 dev = [
