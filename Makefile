@@ -1,4 +1,6 @@
-.PHONY: up down fetch-data ingest test test-integration lint typecheck
+.PHONY: up down fetch-data ingest eval test test-integration lint typecheck
+
+RETRIEVER ?= bm25
 
 up:
 	docker compose up -d
@@ -11,6 +13,9 @@ fetch-data:
 
 ingest:
 	uv run python -m src.ingest
+
+eval:
+	uv run python -m src.eval.runner --retriever $(RETRIEVER) $(if $(LIMIT),--limit $(LIMIT),)
 
 test:
 	uv run pytest

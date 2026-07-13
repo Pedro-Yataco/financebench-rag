@@ -5,6 +5,7 @@ description = "RAG pipeline over the FinanceBench open subset with a page-level 
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "bm25s==0.3.9",
     "docling==2.112.0",
     "pydantic==2.13.4",
     "qdrant-client==1.18.0",
