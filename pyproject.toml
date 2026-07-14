@@ -37,6 +37,11 @@ strict = true
 module = ["docling.*", "fastembed.*", "bm25s.*", "ragas.*", "streamlit.*"]
 ignore_missing_imports = true
 
+# docling-core is typed but re-exports its public API without __all__.
+[[tool.mypy.overrides]]
+module = ["docling_core.*"]
+implicit_reexport = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

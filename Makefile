@@ -1,4 +1,4 @@
-.PHONY: up down fetch-data ingest eval test test-integration lint typecheck
+.PHONY: up down fetch-data ingest chunk eval test test-integration lint typecheck
 
 RETRIEVER ?= bm25
 
@@ -13,6 +13,9 @@ fetch-data:
 
 ingest:
 	uv run python -m src.ingest
+
+chunk:
+	uv run python -m src.chunk
 
 eval:
 	uv run python -m src.eval.runner --retriever $(RETRIEVER) $(if $(LIMIT),--limit $(LIMIT),)
