@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from src.dataset import Question, load_questions
-from src.eval.runner import build_payload, evaluate_retrieval, write_results
+from src.eval.runner import build_payload, build_retriever, evaluate_retrieval, write_results
+from src.retrieve import BM25PageRetriever
 
 FIXTURE = Path("tests/fixtures/questions_sample.jsonl")
 
@@ -100,6 +101,37 @@ def test_build_payload_carries_run_metadata() -> None:
     assert payload["timestamp"].endswith("+00:00")
     assert payload["metrics"] == evaluation["metrics"]
     assert len(payload["per_question"]) == 3
+
+
+def test_build_payload_merges_retriever_config() -> None:
+    questions = _questions()
+    evaluation = evaluate_retrieval(questions, FakeRetriever(RANKINGS), k=10)
+
+    payload = build_payload(
+        evaluation,
+        retriever_name="hybrid",
+        k=10,
+        smoke=False,
+        extra_config={"collection": "financebench", "prefetch_limit": 20},
+    )
+
+    assert payload["config"] == {
+        "retriever": "hybrid",
+        "k": 10,
+        "collection": "financebench",
+        "prefetch_limit": 20,
+    }
+
+
+def test_build_retriever_bm25_needs_no_extra_config() -> None:
+    retriever, extra_config = build_retriever("bm25")
+    assert isinstance(retriever, BM25PageRetriever)
+    assert extra_config == {}
+
+
+def test_build_retriever_rejects_unknown_names() -> None:
+    with pytest.raises(ValueError, match="unknown retriever"):
+        build_retriever("bm42")
 
 
 def test_write_results_creates_timestamped_json(tmp_path: Path) -> None:

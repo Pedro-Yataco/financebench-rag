@@ -10,7 +10,8 @@ support. Evaluated with page-level retrieval metrics and an end-to-end grading h
 
 ## Status
 
-Work in progress — eval harness and BM25 baseline in place.
+Work in progress — eval harness, BM25 baseline, and hybrid retrieval (dense BGE-M3 +
+sparse BM25 over Qdrant) in place.
 
 ## Results
 
@@ -23,11 +24,14 @@ page appears in the top-k; MRR uses the rank of the first gold page.
 | Retriever | recall@5 | recall@10 | MRR |
 |---|---|---|---|
 | BM25 over page text (baseline) | 0.367 | 0.487 | 0.243 |
+| Hybrid: dense (BGE-M3) + sparse BM25, RRF | 0.453 | 0.607 | 0.319 |
 
-Per question type, recall@5 ranges from 0.14 (metrics-generated — numeric questions whose
-wording rarely matches the filing text) to 0.64 (novel-generated). Every row is produced by
-`make eval`, which writes a full results JSON (config, git SHA, per-question records) to
-`eval/results/`.
+The hybrid retriever queries 512-token structure-aware chunks (Docling HybridChunker) with
+dense and sparse prefetch fused by reciprocal rank fusion, then ranks pages by first
+occurrence in the fused chunk list. The largest gain is on metrics-generated questions —
+numeric questions whose wording rarely matches the filing text — where recall@5 goes from
+0.14 (BM25) to 0.40; novel-generated reaches 0.62. Every row is produced by `make eval`,
+which writes a full results JSON (config, git SHA, per-question records) to `eval/results/`.
 
 ## Requirements
 
@@ -42,5 +46,8 @@ uv sync            # install pinned dependencies
 make test          # unit test suite
 make lint          # ruff check + format check
 make typecheck     # mypy
-make eval          # retrieval eval (RETRIEVER=bm25, LIMIT=N for a smoke subset)
+make up            # start Qdrant (docker compose)
+make chunk         # chunk parsed docs into data/chunks/ (resumable)
+make index         # embed chunks and upsert into Qdrant (resumable)
+make eval          # retrieval eval (RETRIEVER=bm25|hybrid, LIMIT=N for a smoke subset)
 ```

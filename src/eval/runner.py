@@ -20,7 +20,7 @@ from typing import Any
 from src.dataset import Question, load_questions
 from src.eval.metrics import full_recall_at_k, recall_at_k, reciprocal_rank
 from src.pages import evidence_page_no
-from src.retrieve import BM25PageRetriever, PageRetriever
+from src.retrieve import BM25PageRetriever, HybridChunkRetriever, PageRetriever
 
 RESULTS_DIR = Path("eval/results")
 RECALL_KS = (5, 10)
@@ -86,15 +86,50 @@ def _git_sha() -> str:
     return result.stdout.strip()
 
 
+def build_retriever(name: str) -> tuple[PageRetriever, dict[str, Any]]:
+    """Retriever instance plus the config fragment recorded in the results JSON."""
+    if name == "bm25":
+        return BM25PageRetriever(), {}
+    if name == "hybrid":
+        from qdrant_client import QdrantClient
+
+        from src.index import (
+            COLLECTION,
+            DENSE_MODEL_ID,
+            QDRANT_URL,
+            SPARSE_MODEL_ID,
+            build_dense_embedder,
+            build_sparse_query_embedder,
+        )
+
+        retriever = HybridChunkRetriever(
+            QdrantClient(url=QDRANT_URL, timeout=60),
+            build_dense_embedder(),
+            build_sparse_query_embedder(),
+        )
+        config = {
+            "collection": COLLECTION,
+            "dense_model": DENSE_MODEL_ID,
+            "sparse_model": SPARSE_MODEL_ID,
+            "prefetch_limit": retriever.prefetch_limit,
+        }
+        return retriever, config
+    raise ValueError(f"unknown retriever: {name}")
+
+
 def build_payload(
-    evaluation: dict[str, Any], retriever_name: str, k: int, smoke: bool
+    evaluation: dict[str, Any],
+    retriever_name: str,
+    k: int,
+    smoke: bool,
+    extra_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Full results-JSON payload: run metadata plus the evaluation output."""
     return {
         "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
         "git_sha": _git_sha(),
         "runner": "retrieval",
-        "config": {"retriever": retriever_name, "k": k},
+        "config": {"retriever": retriever_name, "k": k, **(extra_config or {})},
         "n_questions": len(evaluation["per_question"]),
         "smoke": smoke,
         **evaluation,
@@ -112,7 +147,7 @@ def write_results(payload: dict[str, Any], results_dir: Path = RESULTS_DIR) -> P
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evaluate page retrieval over FinanceBench.")
-    parser.add_argument("--retriever", choices=["bm25"], default="bm25")
+    parser.add_argument("--retriever", choices=["bm25", "hybrid"], default="bm25")
     parser.add_argument("--k", type=int, default=10, help="pages retrieved per question")
     parser.add_argument(
         "--limit", type=int, default=None, metavar="N", help="smoke run on the first N questions"
@@ -122,10 +157,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     questions = load_questions()
     if args.limit is not None:
         questions = questions[: args.limit]
-    retriever = BM25PageRetriever()
+    retriever, extra_config = build_retriever(args.retriever)
 
     evaluation = evaluate_retrieval(questions, retriever, k=args.k)
-    payload = build_payload(evaluation, args.retriever, args.k, smoke=args.limit is not None)
+    payload = build_payload(
+        evaluation, args.retriever, args.k, smoke=args.limit is not None, extra_config=extra_config
+    )
     path = write_results(payload)
 
     smoke_note = " (smoke - not citable)" if payload["smoke"] else ""
